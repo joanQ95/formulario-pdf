@@ -1,17 +1,22 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { useForm } from "react-hook-form";
-import { PDFDownloadLink, Document, Page, Text, Image } from "@react-pdf/renderer";
+import { PDFDownloadLink, Document, Page, Text, Image, pdf } from "@react-pdf/renderer";
 import Webcam from "react-webcam";
 import "./App.css";
 
 function App() {
-  const { register, handleSubmit, reset } = useForm();
-  const [formData, setFormData] = useState(null);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm();
+  
   const [images, setImages] = useState([]);
   const [descriptions, setDescriptions] = useState({});
   const [currentPhoto, setCurrentPhoto] = useState(0);
-  const [historial, setHistorial] = useState([]);
-  const webcamRef = useRef(null);
+  const [historialPDFs, setHistorialPDFs] = useState([]);
+  const webcamRef = React.useRef(null);
   const [showCamera, setShowCamera] = useState(false);
 
   const capture = () => {
@@ -28,23 +33,11 @@ function App() {
   };
 
   const deletePhoto = (index) => {
-    const newImages = images.filter((_, i) => i !== index);
+    setImages(images.filter((_, i) => i !== index));
     const newDescriptions = { ...descriptions };
     delete newDescriptions[index];
-
-    setImages(newImages);
     setDescriptions(newDescriptions);
     setCurrentPhoto(Math.max(currentPhoto - 1, 0));
-  };
-
-  const onSubmit = (data) => {
-    const report = { ...data, images, descriptions };
-    setHistorial([...historial, report]);
-    setFormData(report);
-    reset();
-    setImages([]);
-    setDescriptions({});
-    setCurrentPhoto(0);
   };
 
   const MyPDF = ({ data }) => (
@@ -73,25 +66,59 @@ function App() {
     </Document>
   );
 
+  const onSubmit = async (data) => {
+    const report = { ...data, images, descriptions };
+    
+    const blob = await pdf(<MyPDF data={report} />).toBlob();
+    const url = URL.createObjectURL(blob);
+
+    setHistorialPDFs([...historialPDFs, { cliente: data.cliente, referencia: data.referencia, url }]);
+
+    reset();
+    setImages([]);
+    setDescriptions({});
+    setCurrentPhoto(0);
+  };
+
   return (
     <div className="container">
       <h2>Formulario de Inspección</h2>
       <form onSubmit={handleSubmit(onSubmit)} className="form">
-        <input {...register("cliente", { required: true })} placeholder="Cliente" />
-        <input {...register("referencia", { required: true })} placeholder="Referencia" />
+        <div>
+          <input
+            {...register("cliente", { required: "Este campo es obligatorio" })}
+            placeholder="Cliente"
+            className={errors.cliente ? "error" : ""}
+          />
+          {errors.cliente && <span className="error-message">{errors.cliente.message}</span>}
+        </div>
+
+        <div>
+          <input
+            {...register("referencia", { required: "Este campo es obligatorio" })}
+            placeholder="Referencia"
+            className={errors.referencia ? "error" : ""}
+          />
+          {errors.referencia && <span className="error-message">{errors.referencia.message}</span>}
+        </div>
 
         <div className="checkbox-container">
           <label><input type="checkbox" {...register("placaDatos")} /> Placa de Datos</label>
           <label><input type="checkbox" {...register("fugaAceite")} /> Fuga de Aceite</label>
         </div>
 
-        <input {...register("marca", { required: true })} placeholder="Marca" />
-        <input {...register("tipo", { required: true })} placeholder="Tipo" />
-        <input {...register("serie", { required: true })} placeholder="Serie" />
-        <input type="number" {...register("potencia", { required: true })} placeholder="Potencia (kW)" />
-        <input {...register("ratio", { required: true })} placeholder="Ratio" />
-        <input {...register("tipoAceite", { required: true })} placeholder="Tipo de Aceite" />
-        <input type="number" {...register("cantidadAceite", { required: true })} placeholder="Cantidad de Aceite (L)" />
+        <div>
+          <input
+            {...register("marca", { required: "Este campo es obligatorio" })}
+            placeholder="Marca"
+            className={errors.marca ? "error" : ""}
+          />
+          {errors.marca && <span className="error-message">{errors.marca.message}</span>}
+        </div>
+
+        <input {...register("tipo", { required: true })} placeholder="Tipo" className={errors.tipo ? "error" : ""} />
+        <input {...register("serie", { required: true })} placeholder="Serie" className={errors.serie ? "error" : ""} />
+        <input type="number" {...register("potencia", { required: true })} placeholder="Potencia (kW)" className={errors.potencia ? "error" : ""} />
 
         <h3>Registro Fotográfico</h3>
         {showCamera ? (
@@ -122,17 +149,12 @@ function App() {
         <button type="submit">Generar PDF</button>
       </form>
 
-      {formData && (
-        <PDFDownloadLink document={<MyPDF data={formData} />} fileName="inspeccion.pdf" className="download-btn">
-          {({ loading }) => (loading ? "Generando PDF..." : "Descargar PDF")}
-        </PDFDownloadLink>
-      )}
-
-      <h2>Historial de Reportes</h2>
+      <h2>Historial de PDFs Generados</h2>
       <ul>
-        {historial.map((report, index) => (
+        {historialPDFs.map((pdf, index) => (
           <li key={index}>
-            <strong>Cliente:</strong> {report.cliente} - <strong>Referencia:</strong> {report.referencia}
+            <strong>{pdf.cliente} - {pdf.referencia}</strong>
+            <a href={pdf.url} download={`Reporte_${pdf.cliente}.pdf`} className="download-btn">Descargar PDF</a>
           </li>
         ))}
       </ul>
